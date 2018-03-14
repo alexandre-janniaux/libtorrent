@@ -74,6 +74,7 @@ public:
 	{
 	}
 
+    // TODO: SSL: change sock_type according to OPENSSL or GNUTLS
 	typedef typename boost::asio::ssl::stream<Stream> sock_type;
 	typedef typename sock_type::next_layer_type next_layer_type;
 	typedef typename Stream::lowest_layer_type lowest_layer_type;
@@ -84,15 +85,18 @@ public:
 	executor_type get_executor() { return m_sock.get_executor(); }
 #endif
 
+    // TODO: SSL: move to .cpp file and change according to OPENSSL or GNUTLS
 	void set_host_name(std::string name)
 	{
 		aux::openssl_set_tlsext_hostname(m_sock.native_handle(), name.c_str());
 	}
 
+    // TODO: SSL: should set_verify_callback be implemented for the gnutls stream ?
 	template <class T>
 	void set_verify_callback(T const& fun, error_code& ec)
 	{ m_sock.set_verify_callback(fun, ec); }
 
+    // TODO: SSL: shouldn't return a SSL*, maybe a void* ?
 	SSL* native_handle() { return m_sock.native_handle(); }
 
 	using handler_type = std::function<void(error_code const&)>;
