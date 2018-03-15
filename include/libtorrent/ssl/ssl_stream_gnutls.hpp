@@ -10,6 +10,8 @@ namespace gnutls {
 template<typename Stream>
 class Stream {
 
+	using error_code = boost::system::error_code;
+
 	public:
 
 		typedef typename sock_type::next_layer_type next_layer_type;
@@ -17,28 +19,49 @@ class Stream {
 		enum handshake_type { TEST };
 
 		template<typename HandshakeHandler>
-		void async_handshake(handshake_type type,HandshakeHandler handler) {
-
+		void async_handshake(handshake_type type, HandshakeHandler handler) {
+			boost::asio::post([type, handler]() {
+				error_code ec;
+				handshake(type, handler, ec);
+				handler(ec);
+			});
 		}
 
 		template<typename ConstBufferSequence, typename BufferedHandshakeHandler>
 		void async_handshake(handshake_type type, const ConstBufferSequence& buffers, BufferedHandshakeHandler handler) {
-
+			boost::asio::post([type, &buffers, handler]() {
+				error_code ec
+				int bytes_transferred = 0;
+				handshake(type, buffers, handlers, ec);
+				handler(ec, bytes_transferred);
+			});
 		}
 
 		template<typename MutableBufferSequence, typename ReadHandler>
 		void async_read_some(const MutableBufferSequence& buffers, ReadHandler handler) {
-
+			boost::asio::post([&buffers, handler]() {
+				error_code ec;
+				auto bytes_read = read_some(buffers, handler, ec);
+				handler(ec, bytes_read);
+			});
 		}
 
 		template<typename ShutdownHandler>
 		void async_shutdown(ShutdownHandler handler) {
-
+			boost::asio::post([handler]() {
+				error_code ec;
+				shutdown(ec);
+				handler(ec);
+			});
 		}
 
 		template<typename ConstBufferSequence, typename WriteHandler>
 		void async_write_some(const ConstBufferSequence& buffers, WriteHandler handler) {
-
+			boost::asio::post([&buffers, handler]() {
+				error_code ec;
+				int bytes_transferred = write_some(buffers, ec);
+				handler(ec, bytes_transferred);
+			});
 		}
 
 		boost::asio::io_service& get_io_service() {
@@ -46,11 +69,11 @@ class Stream {
 		}
 
 		void handshake(handshake_type type) {
-			boost::system::error_code ec;
+			error_code ec;
 			handshake(type, ec);
 		}
 
-		boost::system::error_code handshake(handshake_type type, boost::system::error_code& ec) {
+		error_code handshake(handshake_type type, error_code& ec) {
 			int err = gnutls_handshake(m_session);
 			if( err != 0 ) {
 
@@ -59,11 +82,14 @@ class Stream {
 
 		template<typename ConstBufferSequence>
 		void handshake(handshake_type type, const ConstBufferSequence& buffers) {
-
+			error_code ec;
+			handshake(type, ec);
+			// TODO: error checking
 		}
 
 		template<typename ConstBufferSequence>
-		boost::system::error_code handshake(handshake_type type, const ConstBufferSequence& buffers, boost::system::error_code& ec) {
+		error_code handshake(handshake_type type, const ConstBufferSequence& buffers, error_code& ec) {
+			handshake(type, ec);
 
 		}
 
@@ -76,7 +102,7 @@ class Stream {
 		}
 
 		gnutls_session_t native_handle() {
-
+            return m_session;
 		}
 
 		const next_layer_type& next_layer() const {
@@ -89,10 +115,14 @@ class Stream {
 
 		template<typename MutableBufferSequence>
 		std::size_t read_some(const MutableBufferSequence& buffers) {
+			error_code ec;
+			auto bytes_read = read_some(buffers, ec);
+			// TODO: exception
+			return bytes_read;
 		}
 
 		template<typename MutableBufferSequence>
-		std::size_t read_some(const MutableBufferSequence& buffers, boost::system::error_code& ec) {
+		std::size_t read_some(const MutableBufferSequence& buffers, error_code& ec) {
 			using boost::asio::buffer_type;
 			using boost::asio::buffer_size;
 			// TODO: err handling
@@ -101,40 +131,60 @@ class Stream {
 
 		template<typename VerifyCallback>
 		void set_verify_callback(VerifyCallback callback) {
-
+			error_code ec;
+			set_verify_callback(callback, ec);
+			// TODO: error handling
 		}
 
 		template<typename VerifyCallback>
-		boost::system::error_code set_verify_callback(VerifyCallback callback, ,boost::system::error_code& ec) {
-
+		error_code set_verify_callback(VerifyCallback callback, ,error_code& ec) {
+			// TODO: have cred somewhere
+			// This function convert callback output to int so as to match verify_function prototype
+			gnutls_certificate_set_verify_function(cred, [](gnutls_session_t session) {
+				if(!callback(session))
+					return 0;
+				return 1
+			});
+			// TODO: what to do with error_code ?
+			return ec;
 		}
 
 		void set_verify_depth(int depth) {
-
+			// XXX: what to do ?
+			// note: gnutls_certificate_set_verify_limits allows to customize the default verification
+			// function limits parameters but we might push our own function
+			error_code ec;
+			set_verify_depth(depth, ec);
 		}
 
-		boost::system::error_code set_verify_depth(int depth, boost::system::error_code& ec) {
+		error_code set_verify_depth(int depth, error_code& ec) {
+			// XXX: sign check ?
 			m_depth = depth;
 		}
 
 		void set_verify_mode(verify_mode v) {
-			boost::system::error_code ec;
+			error_code ec;
 			set_verify_mode(v, ec);
 			// TODO: error check
 		}
 
-		boost::system::error_code set_verify_mode(verify_mode v, boost::system::error_code& ec) {
-			// TODO: store mode
+		error_code set_verify_mode(verify_mode v, error_code& ec) {
+			// TODO: store mode, gnutls_certificate_verify_flags
+			// TODO: gnutls_certificate_set_verify_flags <= doesn't seem to be the right function
 		}
 
 		void shutdown() {
-			boost::system::error_code ec;
+			error_code ec;
 			shutdown(ec);
 			// TODO: error check
 		}
 
-		boost::system::error_code shutdown(boost::system::error_code& ec) {
-			int err = gnutls_bye(m_session, GNUTLS_SHUT_RDWR);
+		error_code shutdown(error_code& ec) {
+			int err;
+			do {
+				err = gnutls_bye(m_session, GNUTLS_SHUT_RDWR);
+			while(err == GNUTLS_E_AGAIN || err == GNUTLS_E_INTERRUPTED);
+			//TODO: error_handling
 		}
 
 		template<typename Arg>
@@ -147,16 +197,26 @@ class Stream {
 
 		template<typename ConstBufferSequence>
 		std::size_t write_some(const ConstBufferSequence& buffers) {
-			boost::system::error_code ec;
-			write_some(buffers, ec);
+			error_code ec;
+			auto byte_sent = write_some(buffers, ec);
+			// TODO: error_handling
+			return byte_sent;
 		}
 
 		template<typename ConstBufferSequence>
-		std::size_t write_some(const ConstBufferSequence& buffers, boost::system::error_code& ec) {
+		std::size_t write_some(const ConstBufferSequence& buffers, error_code& ec) {
 			using boost::asio::buffer_size;
 			using boost::asio::buffer_cast;
-			int err = gnutls_record_send(m_session, buffer_cast<const char*>(buffers), buffer_size(buffers));
+			int bytes_sent;
+			do {
+				bytes_sent = gnutls_record_send(m_session, buffer_cast<const char*>(buffers), buffer_size(buffers));
+			} while(bytes_sent == GNUTLS_E_AGAIN || bytes_sent == GNUTLS_E_INTERRUPTED);
+
+			if(bytes_sent > 0)
+				return bytes_sent;
+
 			// TODO: err handling
+			return -1;
 		}
 
 		~Stream() {
@@ -180,13 +240,13 @@ class Stream {
 
 		static int post_client_hello_func(gnutls_session_t session) {
 			// TODO: check SNI : here or elsewhere ? let gnutls dispatch ?
+			// TODO: should be in a separated class (not in boost interface)
 		}
 
 		gnutls_session_t m_session;
 		Stream m_next_layer;
 		unsigned int m_depth = std::numeric_limits<unsigned int>::max();
-
-
+        unsigned int m_verifyMode;
 };
 
 
