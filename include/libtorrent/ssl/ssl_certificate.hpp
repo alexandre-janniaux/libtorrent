@@ -31,22 +31,85 @@ class certificate {
 		return m_cert.get();
 	}
 
-	class general_names_t {
+	/*
+	 * Wrapper around X509 general names properties
+	 */
+	class GeneralName {
+		public:
+			struct {
+				std::string_view get_dns_name() {
+					assert(get_type() == GEN_DNS);
+					auto domain = m_name->d.dNSName;
+					if(domain->type != V_ASN1_IA5STRING || !domain->data || !domain.length)
+						return "";
+					return reinterpret_cast<const char*>(domain->data);
+				}
+			};
+			int get_type() {
+				return m_name->type;
+			}
 
-		general_names_t(GENERAL_NAMES* names) {
+			
 
+		private:
+			GENERAL_NAME* m_name;
+	};
+
+	/*
+	 * Iterator on the general names registered in the X509 certificate
+	 */
+	class general_names_iterator_t {
+		friend class general_names_t;
+		general_names_iterator_t(GENERAL_NAMES* names, std::size_t index) {
+			m_names = names;
+			m_index = index;
 		}
 
+		public:
+		using value_type = GeneralName;
+		using difference_type = std::ssize_t;
+		using reference = GeneralName&;
+
+		general_names_iterator_t operator++() {
+			general_names_iterator_t other = *this;
+			m_index++;
+			return other;
+		}
+
+		GeneralName operator*() {
+			auto name = aux::openssl_general_name_value(m_names, m_index)
+			return {
+				.type = name->type,
+				.data = name->data
+			};
+		}
+
+		private:
+		GENERAL_NAMES* m_names;
+		std::size_t m_index;
+	};
+
+	/*
+	 * Proxy class for the general names stored in X509 certificates
+	 */
+	class general_names_t {
+
 		friend general_names_t certificate::get_general_names();
+		general_names_t(GENERAL_NAMES* names) {
+			m_names = names;
+		}
 
 		public:
 		general_name_iterator begin() {
-
+			return general_names_iterator(m_names, 0);
 		}
 
 		const_general_name_iterator begin() {
 
 		}
+
+		private:
+		GENERAL_NAMES* m_names;
 	}
 
 	general_names_t get_subject_alt_names() {

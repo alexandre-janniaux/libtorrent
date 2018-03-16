@@ -74,9 +74,14 @@ class Stream {
 		}
 
 		error_code handshake(handshake_type type, error_code& ec) {
-			int err = gnutls_handshake(m_session);
-			if( err != 0 ) {
+			int err;
 
+			do {
+				err = gnutls_handshake(m_session);
+			} while(err == GNUTLS_E_AGAIN || err == GNUTLS_E_INTERRUPTED);
+
+			if( err != 0 ) {
+				// TODO: error
 			}
 		}
 
@@ -90,7 +95,7 @@ class Stream {
 		template<typename ConstBufferSequence>
 		error_code handshake(handshake_type type, const ConstBufferSequence& buffers, error_code& ec) {
 			handshake(type, ec);
-
+			return ec;
 		}
 
 		const lowest_layer_type& lowest_layer() const {
@@ -159,6 +164,7 @@ class Stream {
 
 		error_code set_verify_depth(int depth, error_code& ec) {
 			// XXX: sign check ?
+			gnutls_certificate_set_verify_limits(
 			m_depth = depth;
 		}
 
@@ -226,11 +232,12 @@ class Stream {
 	private:
 
 		static std::ssize_t pull_func(void* stream, void* buffer, std::size_t size) {
-			// TODO not complete
+			// TODO not complete, read data
 			return static_cast<Stream*>(stream)->next_layer();
 		}
 
 		static std::ssize_t push_func(void* stream, const void* buffer, std::size_t length) {
+			// TODO not complete, write data
 			return static_cast<Stream*>(stream)->next_layer();
 		}
 

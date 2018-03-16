@@ -44,13 +44,16 @@ POSSIBILITY OF SUCH DAMAGE.
 #include <cstdio> // for snprintf
 #include <functional>
 
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL
 #include "libtorrent/ssl_stream.hpp"
 #include "libtorrent/aux_/disable_warnings_push.hpp"
 #include <boost/asio/ssl/context.hpp>
 #include <boost/asio/ssl/verify_context.hpp>
 #include "libtorrent/aux_/disable_warnings_pop.hpp"
-#endif // TORRENT_USE_OPENSSL
+#elif defined TORRENT_USE_GNUTLS
+#include "libtorrent/ssl_stream.hpp"
+#include <gnutls/gnutls.h>
+#endif // TORRENT_USE_OPENSSL, TORRENT_USE_GNUTLS
 
 #include "libtorrent/torrent.hpp"
 #include "libtorrent/torrent_handle.hpp"
@@ -1425,11 +1428,8 @@ namespace libtorrent {
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
 #endif
 
-	bool torrent::verify_peer_cert(bool const preverified, boost::asio::ssl::verify_context& ctx)
+	bool torrent::verify_peer_cert_openssl(SSL_CTX* ctx)
 	{
-		// if the cert wasn't signed by the correct CA, fail the verification
-		if (!preverified) return false;
-
 		// we're only interested in checking the certificate at the end of the chain.
 		// TODO: is verify_peer_cert called once per certificate in the chain, and
 		// this function just tells us which depth we're at right now? If so, the comment
@@ -1517,7 +1517,19 @@ namespace libtorrent {
 #endif
 	}
 
-	void torrent::init_ssl(string_view cert)
+	bool torrent::verify_peer_cert(bool const preverified, ssl::verify_context& ctx)
+	{
+		// if the cert wasn't signed by the correct CA, fail the verification
+		if (!preverified) return false;
+
+#ifdef TORRENT_USE_OPENSSL
+		return verify_peer_cert(ctx.native_handle());
+#elif TORRENT_USE_GNUTLS
+		return verify_peer_cert(ctx.native_handle());
+#endif
+	}
+
+	void torrent::init_ssl_openssl(string_view cert)
 	{
 		using boost::asio::ssl::context;
 
@@ -1625,6 +1637,96 @@ namespace libtorrent {
 #pragma clang diagnostic pop
 #endif
 #endif // TORRENT_OPENSSL
+
+
+#ifdef TORRENT_USE_GNUTLS
+	void init_ssl_gnutls(string_view cert)
+	{
+		using ssl::gnutls::context;
+
+		// create the SSL context for this torrent. We need to
+		// inject the root certificate, and no other, to
+		// verify other peers against
+		std::shared_ptr<context> ctx = std::make_shared<context>(context::sslv23);
+
+		if (!ctx)
+		{
+			//error_code ec(int(::ERR_get_error()),
+			//	boost::asio::error::get_ssl_category());
+			set_error(ec, torrent_status::error_file_ssl_ctx);
+			pause();
+			return;
+		}
+
+		//ctx->set_options(context::default_workarounds
+		//	| context::no_sslv2
+		//	| context::single_dh_use);
+
+		error_code ec;
+		ctx->set_verify_mode(context::verify_peer
+			| context::verify_fail_if_no_peer_cert
+			| context::verify_client_once, ec);
+		if (ec)
+		{
+			set_error(ec, torrent_status::error_file_ssl_ctx);
+			pause();
+			return;
+		}
+
+		// the verification function verifies the distinguished name
+		// of a peer certificate to make sure it matches the info-hash
+		// of the torrent, or that it's a "star-cert"
+		gnutls_session_set_verify_cert(session, info_hash().c_str(), info_hash().size());
+		int ret = gnutls_server_name_set(session, GNUTLS_NAME_DNS, info_hash().c_str(), info_hash().size());
+		if (ret != GNUTLS_E_SUCCESS)
+		{
+			set_error(ec, torrent_status::error_file_ssl_ctx);
+			pause();
+			return;
+		}
+
+		// TODO: RDID, free
+		gnutls_session_t session = ctx->native_handle();
+		
+		// a gnutls_credential_t is storing the certificates
+		gnutls_credential_t credentials;
+		int ret = gnutls_certificate_allocate_credentials(credentials);
+
+		if (ret != GNUTLS_E_SUCCESS)
+		{
+			//ec.assign(int(::ERR_get_error()),
+			//	boost::asio::error::get_ssl_category());
+			set_error(ec, torrent_status::error_file_ssl_ctx);
+			pause();
+			return;
+		}
+
+		// TODO: RDID, error checking, store credential
+		gnutls_certificate_set_x509_trust_mem(credentials,
+			{cert.data(), cert.size()}, GNUTLS_X509_FMT_PEM);
+		gnutls_certificate_set_verify_function(credentials, verify_peer_cert);
+
+		gnutls_credentials_set(session, GNUTLS_CRD_CERTIFICATE, credentials);
+
+		// if all went well, set the torrent ssl context to this one
+		m_ssl_ctx = ctx;
+		// tell the client we need a cert for this torrent
+		alerts().emplace_alert<torrent_need_cert_alert>(get_handle());
+	}
+
+
+#ifdef TORRENT_USE_OPENSSL
+	void init_ssl(string_view cert)
+	{
+		init_ssl_openssl(cert);
+	}
+#elif TORRENT_USE_GNUTLS
+	void init_ssl(string_view cert)
+	{
+		init_ssl_gnutls(cert);
+	}
+#endif
+
 
 	void torrent::construct_storage()
 	{

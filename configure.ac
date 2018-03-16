@@ -223,6 +223,15 @@ AC_ARG_ENABLE(
 )
 
 AC_ARG_ENABLE(
+  [gnutls],
+  [AS_HELP_STRING(
+    [--enable-gnutls],
+    [enable encryption support with gnutls [default=yes]])],
+  [[ARG_ENABLE_GNUTLS=$enableval]],
+  [[ARG_ENABLE_GNTULS=yes]]
+)
+
+AC_ARG_ENABLE(
   [export-all],
   [AS_HELP_STRING(
     [--enable-export-all],
@@ -387,6 +396,31 @@ AS_CASE(["$ARG_ENABLE_ENCRYPTION"],
    AC_MSG_ERROR([Unknown option "$ARG_ENABLE_ENCRYPTION". Use either "yes" or "no".])]
 )
 
+AC_MSG_CHECKING([whether gnutls support should be enabled])
+AS_CASE(["$ARG_ENABLE_GNUTLS"],
+  ["yes"|"on"], [
+      AC_MSG_RESULT([yes])
+      AC_MSG_NOTICE([encryption support: now checking for the GnuTLS library...])
+
+      PKG_CHECK_MODULES([LIBGNUTLS], [gnutls >= 3.5.8], [
+        AC_DEFINE([TORRENT_USE_GNUTLS],[1],[Define to use GnuTLS support.])
+        COMPILETIME_OPTIONS="$COMPILETIME_OPTIONS -DTORRENT_USE_GNUTLS "
+      ], [
+        AC_MSG_ERROR([GnuTLS library not found. Try using --with-gnutls=DIR or disabling GnuTLS encryption at all. ${GNUTLS_PKG_ERRORS}])
+      ])
+      AC_SUBST([LIBGNUTLS_CFLAGS])
+      AC_SUBST([LIBGNUTLS_LIBS])
+    ],
+  ["no"|"off"], [
+      AC_MSG_RESULT([no])
+      AC_DEFINE([TORRENT_DISABLE_GNUTLS],[1],[Define to disable any GnuTLS encryption support and avoid linking against GnuTLS.])
+      COMPILETIME_OPTIONS="$COMPILETIME_OPTIONS -DTORRENT_DISABLE_GNUTLS "
+    ],
+  [AC_MSG_RESULT([$ARG_ENABLE_GNUTLS])
+   AC_MSG_ERROR([Unknown option "$ARG_ENABLE_GNUTLS". Use either "yes" or "no".])]
+)
+
+
 AC_MSG_CHECKING([whether dht support should be enabled])
 AS_CASE(["$ARG_ENABLE_DHT"],
   ["yes"|"on"], [
@@ -486,6 +520,7 @@ AM_CONDITIONAL([ENABLE_TESTS], [test "x$ARG_ENABLE_TESTS" = "xyes"])
 AM_CONDITIONAL([ENABLE_PYTHON_BINDING], [test "x$ARG_ENABLE_PYTHON_BINDING" = "xyes"])
 
 AM_CONDITIONAL([WITH_OPENSSL], [test "x$ARG_ENABLE_ENCRYPTION" = "xyes" -o "x$ARG_ENABLE_ENCRYPTION" = "xon" ])
+AM_CONDITIONAL([WITH_GNUTLS], [test "x$ARG_ENABLE_GNUTLS" = "xyes" -o "x$ARG_ENABLE_GNUTLS" = "xon" ])
 
 
 ###############################################################################
@@ -652,6 +687,16 @@ OpenSSL library:
   OpenSSL Libs:         ${OPENSSL_LIBS}
   OpenSSL LDFlags:      ${OPENSSL_LDFLAGS}
   OpenSSL Includes:     ${OPENSSL_INCLUDES}
+
+END
+])
+
+AS_IF([test "x$ARG_ENABLE_GNUTLS" = "xyes"], [
+cat >> config.report << END
+
+GnuTLS library:
+  GnuTLS Libs:          ${LIBGNUTLS_LIBS}
+  GnuTLS Cflags:        ${LIBGNUTLS_CFLAGS}
 END
 ])
 
