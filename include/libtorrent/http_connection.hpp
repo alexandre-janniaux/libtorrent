@@ -33,17 +33,6 @@ POSSIBILITY OF SUCH DAMAGE.
 #ifndef TORRENT_HTTP_CONNECTION
 #define TORRENT_HTTP_CONNECTION
 
-#ifdef TORRENT_USE_OPENSSL
-// there is no forward declaration header for asio
-namespace boost {
-namespace asio {
-namespace ssl {
-	class context;
-}
-}
-}
-#endif
-
 #include <functional>
 #include <vector>
 #include <string>
@@ -58,6 +47,7 @@ namespace ssl {
 #include "libtorrent/aux_/vector.hpp"
 #include "libtorrent/resolver_interface.hpp"
 #include "libtorrent/optional.hpp"
+#include "libtorrent/ssl/context.hpp"
 
 namespace libtorrent {
 
@@ -85,7 +75,7 @@ struct TORRENT_EXTRA_EXPORT http_connection
 		, int max_bottled_buffer_size = default_max_bottled_buffer_size
 		, http_connect_handler const& ch = http_connect_handler()
 		, http_filter_handler const& fh = http_filter_handler()
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 		, ssl::context* ssl_ctx = nullptr
 #endif
 		);
@@ -162,7 +152,7 @@ private:
 
 	aux::socket_type m_sock;
 
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 	ssl::context* m_ssl_ctx;
 	bool m_own_ssl_context;
 #endif

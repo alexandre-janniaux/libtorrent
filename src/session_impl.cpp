@@ -119,6 +119,8 @@ GCRY_THREAD_OPTION_PTHREAD_IMPL;
 
 namespace {
 
+    //using ssl::context = boost::asio::ssl::context;
+
 	// libgcrypt requires this to initialize the library
 	struct gcrypt_setup
 	{
@@ -397,8 +399,8 @@ namespace aux {
 	session_impl::session_impl(io_service& ios, settings_pack const& pack)
 		: m_settings(pack)
 		, m_io_service(ios)
-#ifdef TORRENT_USE_OPENSSL
-		, m_ssl_ctx(boost::asio::ssl::context::sslv23)
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
+		, m_ssl_ctx(ssl::context::sslv23)
 #endif
 		, m_alerts(m_settings.get_int(settings_pack::alert_queue_size)
 			, alert_category_t{static_cast<unsigned int>(m_settings.get_int(settings_pack::alert_mask))})
@@ -433,7 +435,7 @@ namespace aux {
 			, std::bind(&session_impl::incoming_connection, this, _1)
 			, m_io_service
 			, m_settings, m_stats_counters, nullptr)
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 		, m_ssl_utp_socket_manager(
 			std::bind(&session_impl::send_udp_packet, this, _1, _2, _3, _4, _5)
 			, std::bind(&session_impl::on_incoming_utp_ssl, this, _1)
@@ -481,8 +483,8 @@ namespace aux {
 #endif
 
 		error_code ec;
-#ifdef TORRENT_USE_OPENSSL
-		m_ssl_ctx.set_verify_mode(boost::asio::ssl::context::verify_none, ec);
+#if defined TORRENT_USE_OPENSSL
+		m_ssl_ctx.set_verify_mode(ssl::context::verify_none, ec);
 #if OPENSSL_VERSION_NUMBER >= 0x90812f
 		aux::openssl_set_tlsext_servername_callback(m_ssl_ctx.native_handle()
 			, servername_callback);
@@ -1051,7 +1053,7 @@ namespace aux {
 		}
 #endif
 
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 		bool use_ssl = req.ssl_ctx != nullptr;
 		req.ssl_ctx = &m_ssl_ctx;
 #endif
@@ -1063,7 +1065,7 @@ namespace aux {
 			req.key ^= ls->tracker_key;
 
 			req.listen_port =
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 			// SSL torrents use the SSL listen port
 				use_ssl ? ssl_listen_port(ls) :
 #endif
@@ -1074,11 +1076,11 @@ namespace aux {
 		{
 			for (auto& ls : m_listen_sockets)
 			{
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 				if ((ls->ssl == transport::ssl) != use_ssl) continue;
 #endif
 				req.listen_port =
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 				// SSL torrents use the SSL listen port
 					use_ssl ? ssl_listen_port(ls.get()) :
 #endif
@@ -1785,7 +1787,7 @@ namespace aux {
 			int const port = iface.port;
 			transport const ssl = iface.ssl ? transport::ssl : transport::plaintext;
 
-#ifndef TORRENT_USE_OPENSSL
+#if !defined TORRENT_USE_OPENSSL && !defined TORRENT_USE_GNUTLS
 			if (ssl == transport::ssl)
 			{
 #ifndef TORRENT_DISABLE_LOGGING
@@ -1947,7 +1949,7 @@ namespace aux {
 		for (auto const& iface : m_outgoing_interfaces)
 		{
 			interface_to_endpoints(iface, 0, transport::plaintext, duplex::accept_incoming, eps);
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 			interface_to_endpoints(iface, 0, transport::ssl, duplex::accept_incoming, eps);
 #endif
 		}
@@ -1960,7 +1962,7 @@ namespace aux {
 #if TORRENT_USE_IPV6
 			eps.emplace_back(address_v6(), 0, "", transport::plaintext);
 #endif
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 			eps.emplace_back(address_v4(), 0, "", transport::ssl);
 #if TORRENT_USE_IPV6
 			eps.emplace_back(address_v6(), 0, "", transport::ssl);
@@ -2303,7 +2305,7 @@ namespace aux {
 
 		s->write_blocked = false;
 
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 		auto i = std::find_if(
 			m_listen_sockets.begin(), m_listen_sockets.end()
 			, [&s] (std::shared_ptr<listen_socket_t> const& ls) { return ls->udp_sock == s; });
@@ -2311,7 +2313,7 @@ namespace aux {
 
 		// notify the utp socket manager it can start sending on the socket again
 		struct utp_socket_manager& mgr =
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 			(i != m_listen_sockets.end() && (*i)->ssl == transport::ssl) ? m_ssl_utp_socket_manager :
 #endif
 			m_utp_socket_manager;
@@ -2354,7 +2356,7 @@ namespace aux {
 		if (!s) return;
 
 		struct utp_socket_manager& mgr =
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 			ssl == transport::ssl ? m_ssl_utp_socket_manager :
 #endif
 			m_utp_socket_manager;
@@ -2476,7 +2478,7 @@ namespace aux {
 		std::shared_ptr<socket_type> c = std::make_shared<socket_type>(m_io_service);
 		tcp::socket* str = nullptr;
 
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 		if (ssl == transport::ssl)
 		{
 			// accept connections initializing the SSL connection to
@@ -2495,7 +2497,7 @@ namespace aux {
 
 		ADD_OUTSTANDING_ASYNC("session_impl::on_accept_connection");
 
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 		TORRENT_ASSERT((ssl == transport::ssl) == is_ssl(*c));
 #endif
 
@@ -2586,7 +2588,7 @@ namespace aux {
 		}
 		async_accept(listener, ssl);
 
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 		if (ssl == transport::ssl)
 		{
 			TORRENT_ASSERT(is_ssl(*s));
@@ -2605,7 +2607,7 @@ namespace aux {
 		}
 	}
 
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 
 	void session_impl::on_incoming_utp_ssl(std::shared_ptr<socket_type> const& s)
 	{
@@ -2657,7 +2659,7 @@ namespace aux {
 		incoming_connection(s);
 	}
 
-#endif // TORRENT_USE_OPENSSL
+#endif // TORRENT_USE_OPENSSL || TORRENT_USE_GNUTLS
 
 	void session_impl::incoming_connection(std::shared_ptr<socket_type> const& s)
 	{
@@ -3147,7 +3149,7 @@ namespace aux {
 		if (m_abort)
 		{
 			if (m_utp_socket_manager.num_sockets() == 0
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 				&& m_ssl_utp_socket_manager.num_sockets() == 0
 #endif
 				&& m_undead_peers.empty()
@@ -3158,7 +3160,7 @@ namespace aux {
 #if defined TORRENT_ASIO_DEBUGGING
 			std::fprintf(stderr, "uTP sockets: %d ssl-uTP sockets: %d undead-peers left: %d\n"
 				, m_utp_socket_manager.num_sockets()
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 				, m_ssl_utp_socket_manager.num_sockets()
 #else
 				, 0
@@ -3190,7 +3192,7 @@ namespace aux {
 		m_last_tick = now;
 
 		m_utp_socket_manager.tick(now);
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 		m_ssl_utp_socket_manager.tick(now);
 #endif
 
@@ -3205,7 +3207,7 @@ namespace aux {
 #endif
 
 		m_utp_socket_manager.decay();
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 		m_ssl_utp_socket_manager.decay();
 #endif
 
@@ -5363,7 +5365,7 @@ namespace aux {
 
 	std::uint16_t session_impl::ssl_listen_port(listen_socket_t* sock) const
 	{
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 		if (sock) return std::uint16_t(sock->tcp_external_port);
 
 		// if not, don't tell the tracker anything if we're in force_proxy

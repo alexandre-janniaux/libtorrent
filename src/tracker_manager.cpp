@@ -40,11 +40,7 @@ POSSIBILITY OF SUCH DAMAGE.
 #include "libtorrent/performance_counters.hpp"
 #include "libtorrent/socket_io.hpp"
 
-#ifdef TORRENT_USE_OPENSSL
-#include "libtorrent/aux_/disable_warnings_push.hpp"
-#include <boost/asio/ssl/context.hpp>
-#include "libtorrent/aux_/disable_warnings_pop.hpp"
-#endif
+#include "libtorrent/ssl/context.hpp"
 
 using namespace std::placeholders;
 
@@ -278,7 +274,7 @@ namespace libtorrent {
 
 		std::string protocol = req.url.substr(0, req.url.find(':'));
 
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 		if (protocol == "http" || protocol == "https")
 #else
 		if (protocol == "http")

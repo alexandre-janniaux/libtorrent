@@ -217,7 +217,7 @@ namespace {
 
 		std::uint8_t out_policy = std::uint8_t(m_settings.get_int(settings_pack::out_enc_policy));
 
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 		// never try an encrypted connection when already using SSL
 		if (is_ssl(*get_socket()))
 			out_policy = settings_pack::pe_disabled;
@@ -2983,7 +2983,7 @@ namespace {
 					, "unrecognized protocol header");
 #endif
 
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 				if (is_ssl(*get_socket()))
 				{
 #ifndef TORRENT_DISABLE_LOGGING

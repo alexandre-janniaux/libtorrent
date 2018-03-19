@@ -33,36 +33,21 @@ POSSIBILITY OF SUCH DAMAGE.
 #ifndef TORRENT_SSL_STREAM_HPP_INCLUDED
 #define TORRENT_SSL_STREAM_HPP_INCLUDED
 
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 
 #include "libtorrent/socket.hpp"
 #include "libtorrent/error_code.hpp"
 #include "libtorrent/io_service.hpp"
-#include "libtorrent/aux_/openssl.hpp"
 
 #include <functional>
 
-#include "libtorrent/aux_/disable_warnings_push.hpp"
-#include <boost/asio/ssl.hpp>
-#if defined TORRENT_BUILD_SIMULATOR
-#include "simulator/simulator.hpp"
+#if defined  TORRENT_USE_OPENSSL
+#elif defined TORRENT_USE_GNUTLS
 #endif
-#include "libtorrent/aux_/disable_warnings_pop.hpp"
+
+#include "libtorrent/ssl/context.hpp"
 
 namespace libtorrent {
-
-	namespace ssl {
-
-#if defined TORRENT_BUILD_SIMULATOR
-	using sim::asio::ssl::context;
-	using sim::asio::ssl::stream_base;
-	using sim::asio::ssl::stream;
-#else
-	using boost::asio::ssl::context;
-	using boost::asio::ssl::stream_base;
-	using boost::asio::ssl::stream;
-#endif
-	}
 
 template <class Stream>
 class ssl_stream
@@ -75,11 +60,12 @@ public:
 	}
 
     // TODO: SSL: change sock_type according to OPENSSL or GNUTLS
-	typedef typename boost::asio::ssl::stream<Stream> sock_type;
+	typedef typename ssl::stream<Stream> sock_type;
 	typedef typename sock_type::next_layer_type next_layer_type;
 	typedef typename Stream::lowest_layer_type lowest_layer_type;
 	typedef typename Stream::endpoint_type endpoint_type;
 	typedef typename Stream::protocol_type protocol_type;
+	typedef typename ssl::stream<Stream>::native_handle_type native_handle_type;
 #if BOOST_VERSION >= 106600
 	typedef typename sock_type::executor_type executor_type;
 	executor_type get_executor() { return m_sock.get_executor(); }
@@ -88,7 +74,11 @@ public:
     // TODO: SSL: move to .cpp file and change according to OPENSSL or GNUTLS
 	void set_host_name(std::string name)
 	{
+#if defined TORRENT_USE_OPENSSL
 		aux::openssl_set_tlsext_hostname(m_sock.native_handle(), name.c_str());
+#elif defined TORRENT_USE_GNUTLS
+#warning set_hostname not implemented for gnutls
+#endif
 	}
 
     // TODO: SSL: should set_verify_callback be implemented for the gnutls stream ?
@@ -97,7 +87,7 @@ public:
 	{ m_sock.set_verify_callback(fun, ec); }
 
     // TODO: SSL: shouldn't return a SSL*, maybe a void* ?
-	SSL* native_handle() { return m_sock.native_handle(); }
+	native_handle_type native_handle() { return m_sock.native_handle(); }
 
 	using handler_type = std::function<void(error_code const&)>;
 

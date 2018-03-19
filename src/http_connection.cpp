@@ -49,10 +49,12 @@ POSSIBILITY OF SUCH DAMAGE.
 #include <algorithm>
 #include <sstream>
 
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL
 #include "libtorrent/aux_/disable_warnings_push.hpp"
 #include <boost/asio/ssl/context.hpp>
 #include "libtorrent/aux_/disable_warnings_pop.hpp"
+#elif defined TORRENT_USE_GNUTLS
+#include "libtorrent/ssl/ssl_context.hpp"
 #endif
 
 using namespace std::placeholders;
@@ -66,13 +68,13 @@ http_connection::http_connection(io_service& ios
 	, int max_bottled_buffer_size
 	, http_connect_handler const& ch
 	, http_filter_handler const& fh
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 	, ssl::context* ssl_ctx
 #endif
 	)
 	: m_next_ep(0)
 	, m_sock(ios)
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 	, m_ssl_ctx(ssl_ctx)
 	, m_own_ssl_context(false)
 #endif
@@ -109,7 +111,7 @@ http_connection::http_connection(io_service& ios
 
 http_connection::~http_connection()
 {
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 	if (m_own_ssl_context) delete m_ssl_ctx;
 #endif
 }
@@ -154,7 +156,7 @@ void http_connection::get(std::string const& url, time_duration timeout, int pri
 	}
 
 	if (protocol != "http"
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 		&& protocol != "https"
 #endif
 		)
@@ -321,7 +323,7 @@ void http_connection::start(std::string const& hostname, int port
 		aux::proxy_settings null_proxy;
 
 		void* userdata = nullptr;
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 		if (m_ssl)
 		{
 			if (m_ssl_ctx == nullptr)
@@ -475,7 +477,7 @@ void http_connection::close(bool force)
 void http_connection::connect_i2p_tracker(char const* destination)
 {
 	TORRENT_ASSERT(m_sock.get<i2p_stream>());
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 	TORRENT_ASSERT(m_ssl == false);
 #endif
 	m_sock.get<i2p_stream>()->set_destination(destination);
@@ -574,7 +576,7 @@ void http_connection::connect()
 		{
 			// we're using a socks proxy and we're resolving
 			// hostnames through it
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 			if (m_ssl)
 			{
 				TORRENT_ASSERT(m_sock.get<ssl_stream<socks5_stream>>());

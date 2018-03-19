@@ -43,7 +43,7 @@ POSSIBILITY OF SUCH DAMAGE.
 #include "libtorrent/io_service.hpp"
 #include "libtorrent/assert.hpp"
 
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 #include "libtorrent/ssl_stream.hpp"
 #endif
 
@@ -70,7 +70,7 @@ POSSIBILITY OF SUCH DAMAGE.
 
 #endif
 
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 
 #define TORRENT_SOCKTYPE_SSL_FORWARD(x) \
 		case socket_type_int_impl<ssl_stream<tcp::socket>>::value: \
@@ -158,7 +158,7 @@ namespace aux {
 	{ static constexpr int value = 5; };
 #endif
 
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 	template <>
 	struct socket_type_int_impl<ssl_stream<tcp::socket>>
 	{ static constexpr int value = 6; };
@@ -315,7 +315,7 @@ namespace aux {
 #if TORRENT_USE_I2P
 			, i2p_stream
 #endif
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 			, ssl_stream<tcp::socket>
 			, ssl_stream<socks5_stream>
 			, ssl_stream<http_stream>

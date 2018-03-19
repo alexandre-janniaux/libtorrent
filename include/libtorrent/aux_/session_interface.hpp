@@ -49,16 +49,7 @@ POSSIBILITY OF SUCH DAMAGE.
 #include <functional>
 #include <memory>
 
-#ifdef TORRENT_USE_OPENSSL
-// there is no forward declaration header for asio
-namespace boost {
-namespace asio {
-namespace ssl {
-	class context;
-}
-}
-}
-#endif
+#include "libtorrent/ssl/context.hpp"
 
 namespace libtorrent {
 
@@ -294,9 +285,9 @@ namespace aux {
 		virtual void inc_boost_connections() = 0;
 		virtual std::vector<block_info>& block_info_storage() = 0;
 
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 		virtual libtorrent::utp_socket_manager* ssl_utp_socket_manager() = 0;
-		virtual boost::asio::ssl::context* ssl_ctx() = 0 ;
+		virtual ssl::context* ssl_ctx() = 0 ;
 #endif
 
 #if !defined(TORRENT_DISABLE_ENCRYPTION) && !defined(TORRENT_DISABLE_EXTENSIONS)

@@ -46,14 +46,14 @@ namespace libtorrent {
 		, bool peer_connection
 		, bool tracker_connection)
 	{
-#ifndef TORRENT_USE_OPENSSL
+#if !defined TORRENT_USE_OPENSSL && !defined TORRENT_USE_GNUTLS
 		TORRENT_UNUSED(ssl_context);
 #endif
 
 		if (sm)
 		{
 			utp_stream* str;
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 			if (ssl_context)
 			{
 				s.instantiate<ssl_stream<utp_stream>>(ios, ssl_context);
@@ -80,7 +80,7 @@ namespace libtorrent {
 			|| (peer_connection && !ps.proxy_peer_connections)
 			|| (tracker_connection && !ps.proxy_tracker_connections))
 		{
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 			if (ssl_context)
 			{
 				s.instantiate<ssl_stream<tcp::socket>>(ios, ssl_context);
@@ -95,7 +95,7 @@ namespace libtorrent {
 			|| ps.type == settings_pack::http_pw)
 		{
 			http_stream* str;
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 			if (ssl_context)
 			{
 				s.instantiate<ssl_stream<http_stream>>(ios, ssl_context);
@@ -117,7 +117,7 @@ namespace libtorrent {
 			|| ps.type == settings_pack::socks4)
 		{
 			socks5_stream* str;
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 			if (ssl_context)
 			{
 				s.instantiate<ssl_stream<socks5_stream>>(ios, ssl_context);

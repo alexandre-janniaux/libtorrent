@@ -43,7 +43,7 @@ POSSIBILITY OF SUCH DAMAGE.
 #include "libtorrent/performance_counters.hpp" // for counters
 #include "libtorrent/aux_/allocating_handler.hpp"
 
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 #include "libtorrent/ssl_stream.hpp"
 #endif
 
@@ -704,7 +704,7 @@ namespace aux {
 
 			libtorrent::utp_socket_manager* utp_socket_manager() override
 			{ return &m_utp_socket_manager; }
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 			libtorrent::utp_socket_manager* ssl_utp_socket_manager() override
 			{ return &m_ssl_utp_socket_manager; }
 #endif
@@ -798,7 +798,7 @@ namespace aux {
 
 			io_service& m_io_service;
 
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 			// this is a generic SSL context used when talking to
 			// unauthenticated HTTPS servers
 			ssl::context m_ssl_ctx;
@@ -939,7 +939,7 @@ namespace aux {
 			std::shared_ptr<socket_type> m_i2p_listen_socket;
 #endif
 
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 			ssl::context* ssl_ctx() override { return &m_ssl_ctx; }
 			void on_incoming_utp_ssl(std::shared_ptr<socket_type> const& s);
 			void ssl_handshake(error_code const& ec, std::shared_ptr<socket_type> s);
@@ -1127,7 +1127,7 @@ namespace aux {
 
 			libtorrent::utp_socket_manager m_utp_socket_manager;
 
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 			// used for uTP connections over SSL
 			libtorrent::utp_socket_manager m_ssl_utp_socket_manager;
 #endif

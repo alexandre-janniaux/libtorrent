@@ -37,7 +37,8 @@ POSSIBILITY OF SUCH DAMAGE.
 #ifdef TORRENT_USE_OPENSSL
 #include <boost/asio/ssl/context.hpp>
 #include <boost/asio/ssl/rfc2818_verification.hpp>
-
+#elif TORRENT_USE_GNUTLS
+#include "libtorrent/ssl/ssl_context.hpp"
 #endif
 
 #include "libtorrent/debug.hpp"
@@ -47,7 +48,7 @@ namespace aux {
 
 	bool is_ssl(socket_type const& s)
 	{
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 #define CASE(t) case socket_type_int_impl<ssl_stream<t>>::value:
 		switch (s.type())
 		{
@@ -68,7 +69,7 @@ namespace aux {
 	bool is_utp(socket_type const& s)
 	{
 		return s.get<utp_stream>() != nullptr
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 			|| s.get<ssl_stream<utp_stream>>() != nullptr
 #endif
 			;
@@ -78,7 +79,7 @@ namespace aux {
 	bool is_i2p(socket_type const& s)
 	{
 		return s.get<i2p_stream>() != nullptr
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 			|| s.get<ssl_stream<i2p_stream>>() != nullptr
 #endif
 			;
@@ -87,6 +88,7 @@ namespace aux {
 
 	void setup_ssl_hostname(socket_type& s, std::string const& hostname, error_code& ec)
 	{
+        // TODO: implement GNUTLS version wit gnutls_server_name_set
 #if defined TORRENT_USE_OPENSSL
 #ifdef TORRENT_MACOS_DEPRECATED_LIBCRYPTO
 #pragma clang diagnostic push
@@ -138,7 +140,7 @@ namespace aux {
 #endif
 	}
 
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 	namespace {
 
 	void nop(std::shared_ptr<void>) {}
@@ -159,7 +161,7 @@ namespace aux {
 	{
 		error_code e;
 
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 		// for SSL connections, first do an async_shutdown, before closing the socket
 #if defined TORRENT_ASIO_DEBUGGING
 #define MAYBE_ASIO_DEBUGGING add_outstanding_async("on_close_socket");
@@ -217,7 +219,7 @@ namespace aux {
 				get<i2p_stream>()->~i2p_stream();
 				break;
 #endif
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 			case socket_type_int_impl<ssl_stream<tcp::socket>>::value:
 				get<ssl_stream<tcp::socket>>()->~ssl_stream();
 				break;
@@ -238,7 +240,7 @@ namespace aux {
 
 	void socket_type::construct(int type, void* userdata)
 	{
-#ifndef TORRENT_USE_OPENSSL
+#if !defined TORRENT_USE_OPENSSL && !defined TORRENT_USE_GNUTLS
 		TORRENT_UNUSED(userdata);
 #endif
 
@@ -263,7 +265,7 @@ namespace aux {
 				new (reinterpret_cast<i2p_stream*>(&m_data)) i2p_stream(m_io_service);
 				break;
 #endif
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 			case socket_type_int_impl<ssl_stream<tcp::socket>>::value:
 				TORRENT_ASSERT(userdata);
 				new (reinterpret_cast<ssl_stream<tcp::socket>*>(&m_data)) ssl_stream<tcp::socket>(m_io_service
@@ -305,7 +307,7 @@ namespace aux {
 #else
 			"",
 #endif
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 			"SSL/TCP",
 			"SSL/Socks5",
 			"SSL/HTTP",
@@ -345,7 +347,7 @@ namespace aux {
 			case socket_type_int_impl<utp_stream>::value:
 				get<utp_stream>()->set_close_reason(code);
 				break;
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 			case socket_type_int_impl<ssl_stream<utp_stream>>::value:
 				get<ssl_stream<utp_stream>>()->lowest_layer().set_close_reason(code);
 				break;
@@ -360,7 +362,7 @@ namespace aux {
 		{
 			case socket_type_int_impl<utp_stream>::value:
 				return get<utp_stream>()->get_close_reason();
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 			case socket_type_int_impl<ssl_stream<utp_stream>>::value:
 				return get<ssl_stream<utp_stream>>()->lowest_layer().get_close_reason();
 #endif

@@ -45,17 +45,6 @@ POSSIBILITY OF SUCH DAMAGE.
 #include <memory>
 #include <unordered_map>
 
-#ifdef TORRENT_USE_OPENSSL
-// there is no forward declaration header for asio
-namespace boost {
-namespace asio {
-namespace ssl {
-	class context;
-}
-}
-}
-#endif
-
 #include "libtorrent/socket.hpp"
 #include "libtorrent/address.hpp"
 #include "libtorrent/peer_id.hpp"
@@ -69,6 +58,8 @@ namespace ssl {
 #include "libtorrent/error_code.hpp"
 #include "libtorrent/aux_/listen_socket_handle.hpp"
 #include "libtorrent/udp_socket.hpp"
+
+#include "libtorrent/ssl/context.hpp"
 
 namespace libtorrent {
 
@@ -160,8 +151,8 @@ namespace libtorrent {
 		// scrape_tracker() or force_reannounce()
 		bool triggered_manually;
 
-#ifdef TORRENT_USE_OPENSSL
-		boost::asio::ssl::context* ssl_ctx = nullptr;
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
+		ssl::context* ssl_ctx = nullptr;
 #endif
 #if TORRENT_USE_I2P
 		i2p_connection* i2pconn = nullptr;

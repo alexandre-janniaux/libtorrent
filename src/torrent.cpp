@@ -45,12 +45,16 @@ POSSIBILITY OF SUCH DAMAGE.
 #include <functional>
 
 #if defined TORRENT_USE_OPENSSL
+#warning Using openSSL
 #include "libtorrent/ssl_stream.hpp"
 #include "libtorrent/aux_/disable_warnings_push.hpp"
 #include <boost/asio/ssl/context.hpp>
 #include <boost/asio/ssl/verify_context.hpp>
 #include "libtorrent/aux_/disable_warnings_pop.hpp"
 #elif defined TORRENT_USE_GNUTLS
+#warning Using GNUTLS
+#include "libtorrent/ssl/ssl_context.hpp"
+#include "libtorrent/ssl/ssl_stream_gnutls.hpp"
 #include "libtorrent/ssl_stream.hpp"
 #include <gnutls/gnutls.h>
 #endif // TORRENT_USE_OPENSSL, TORRENT_USE_GNUTLS
@@ -1517,21 +1521,18 @@ namespace libtorrent {
 #endif
 	}
 
+#ifdef TORRENT_USE_OPENSSL
 	bool torrent::verify_peer_cert(bool const preverified, ssl::verify_context& ctx)
 	{
 		// if the cert wasn't signed by the correct CA, fail the verification
 		if (!preverified) return false;
 
-#ifdef TORRENT_USE_OPENSSL
 		return verify_peer_cert(ctx.native_handle());
-#elif TORRENT_USE_GNUTLS
-		return verify_peer_cert(ctx.native_handle());
-#endif
 	}
+#endif
 
 	void torrent::init_ssl_openssl(string_view cert)
 	{
-		using boost::asio::ssl::context;
 
 		// this is needed for openssl < 1.0 to decrypt keys created by openssl 1.0+
 #if !defined(OPENSSL_API_COMPAT) || (OPENSSL_API_COMPAT < 0x10100000L)
@@ -1543,7 +1544,7 @@ namespace libtorrent {
 		// create the SSL context for this torrent. We need to
 		// inject the root certificate, and no other, to
 		// verify other peers against
-		std::shared_ptr<context> ctx = std::make_shared<context>(context::sslv23);
+		std::shared_ptr<ssl::context> ctx = std::make_shared<ssl::context>(ssl::context::sslv23);
 
 		if (!ctx)
 		{
@@ -1554,9 +1555,9 @@ namespace libtorrent {
 			return;
 		}
 
-		ctx->set_options(context::default_workarounds
-			| boost::asio::ssl::context::no_sslv2
-			| boost::asio::ssl::context::single_dh_use);
+		ctx->set_options(ssl::context::default_workarounds
+			| ssl::context::no_sslv2
+			| ssl::context::single_dh_use);
 
 		error_code ec;
 		ctx->set_verify_mode(context::verify_peer
@@ -1640,15 +1641,14 @@ namespace libtorrent {
 
 
 #ifdef TORRENT_USE_GNUTLS
-	void init_ssl_gnutls(string_view cert)
+	void torrent::init_ssl_gnutls(string_view cert)
 	{
-		using ssl::gnutls::context;
-
 		// create the SSL context for this torrent. We need to
 		// inject the root certificate, and no other, to
 		// verify other peers against
-		std::shared_ptr<context> ctx = std::make_shared<context>(context::sslv23);
+		std::shared_ptr<ssl::context> ctx = std::make_shared<ssl::context>(ssl::context::sslv23);
 
+		error_code ec;
 		if (!ctx)
 		{
 			//error_code ec(int(::ERR_get_error()),
@@ -1662,10 +1662,9 @@ namespace libtorrent {
 		//	| context::no_sslv2
 		//	| context::single_dh_use);
 
-		error_code ec;
-		ctx->set_verify_mode(context::verify_peer
-			| context::verify_fail_if_no_peer_cert
-			| context::verify_client_once, ec);
+		//ctx->set_verify_mode(ssl::context::verify_peer
+		//	| ssl::context::verify_fail_if_no_peer_cert
+		//	| ssl::context::verify_client_once, ec);
 		if (ec)
 		{
 			set_error(ec, torrent_status::error_file_ssl_ctx);
@@ -1676,8 +1675,8 @@ namespace libtorrent {
 		// the verification function verifies the distinguished name
 		// of a peer certificate to make sure it matches the info-hash
 		// of the torrent, or that it's a "star-cert"
-		gnutls_session_set_verify_cert(session, info_hash().c_str(), info_hash().size());
-		int ret = gnutls_server_name_set(session, GNUTLS_NAME_DNS, info_hash().c_str(), info_hash().size());
+		gnutls_session_set_verify_cert(ctx->native_handle(), m_torrent_file->name().c_str(), m_torrent_file->name().size());
+		int ret = gnutls_server_name_set(ctx->native_handle(), GNUTLS_NAME_DNS, m_torrent_file->name().c_str(), m_torrent_file->name().size());
 		if (ret != GNUTLS_E_SUCCESS)
 		{
 			set_error(ec, torrent_status::error_file_ssl_ctx);
@@ -1686,11 +1685,11 @@ namespace libtorrent {
 		}
 
 		// TODO: RDID, free
-		gnutls_session_t session = ctx->native_handle();
+        gnutls_session_set_ptr(ctx->native_handle(), (void*) this);
 		
 		// a gnutls_credential_t is storing the certificates
-		gnutls_credential_t credentials;
-		int ret = gnutls_certificate_allocate_credentials(credentials);
+		gnutls_certificate_credentials_t credentials;
+		ret = gnutls_certificate_allocate_credentials(&credentials);
 
 		if (ret != GNUTLS_E_SUCCESS)
 		{
@@ -1701,29 +1700,34 @@ namespace libtorrent {
 			return;
 		}
 
+        gnutls_datum_t credentials_datum;
+        credentials_datum.data = reinterpret_cast<unsigned char*>(const_cast<char*>(cert.data()));
+        credentials_datum.size = cert.size();
+
 		// TODO: RDID, error checking, store credential
 		gnutls_certificate_set_x509_trust_mem(credentials,
-			{cert.data(), cert.size()}, GNUTLS_X509_FMT_PEM);
-		gnutls_certificate_set_verify_function(credentials, verify_peer_cert);
+			&credentials_datum, GNUTLS_X509_FMT_PEM);
+		//gnutls_certificate_set_verify_function(credentials, verify_peer_cert);
 
-		gnutls_credentials_set(session, GNUTLS_CRD_CERTIFICATE, credentials);
+		gnutls_credentials_set(ctx->native_handle(), GNUTLS_CRD_CERTIFICATE, credentials);
 
 		// if all went well, set the torrent ssl context to this one
 		m_ssl_ctx = ctx;
 		// tell the client we need a cert for this torrent
 		alerts().emplace_alert<torrent_need_cert_alert>(get_handle());
 	}
+#endif
 
 
 #ifdef TORRENT_USE_OPENSSL
-	void init_ssl(string_view cert)
+	void torrent::init_ssl(string_view cert)
 	{
 		init_ssl_openssl(cert);
 	}
 #elif TORRENT_USE_GNUTLS
-	void init_ssl(string_view cert)
+	void torrent::init_ssl(string_view cert)
 	{
-		init_ssl_gnutls(cert);
+        init_ssl_gnutls(cert);
 	}
 #endif
 
@@ -5381,12 +5385,12 @@ namespace libtorrent {
 
 #ifdef TORRENT_USE_OPENSSL
 	namespace {
-		std::string password_callback(int length, boost::asio::ssl::context::password_purpose p
+		std::string password_callback(int length, ssl::context::password_purpose p
 			, std::string pw)
 		{
 			TORRENT_UNUSED(length);
 
-			if (p != boost::asio::ssl::context::for_reading) return "";
+			if (p != ssl::context::for_reading) return "";
 			return pw;
 		}
 	}
@@ -5409,7 +5413,6 @@ namespace libtorrent {
 			return;
 		}
 
-		using boost::asio::ssl::context;
 		error_code ec;
 		m_ssl_ctx->set_password_callback(std::bind(&password_callback, _1, _2, passphrase), ec);
 		if (ec)
@@ -5417,7 +5420,7 @@ namespace libtorrent {
 			if (alerts().should_post<torrent_error_alert>())
 				alerts().emplace_alert<torrent_error_alert>(get_handle(), ec, "");
 		}
-		m_ssl_ctx->use_certificate_file(certificate, context::pem, ec);
+		m_ssl_ctx->use_certificate_file(certificate, ssl::context::pem, ec);
 		if (ec)
 		{
 			if (alerts().should_post<torrent_error_alert>())
@@ -5427,7 +5430,7 @@ namespace libtorrent {
 		if (should_log())
 			debug_log("*** use certificate file: %s", ec.message().c_str());
 #endif
-		m_ssl_ctx->use_private_key_file(private_key, context::pem, ec);
+		m_ssl_ctx->use_private_key_file(private_key, ssl::context::pem, ec);
 		if (ec)
 		{
 			if (alerts().should_post<torrent_error_alert>())
@@ -5457,9 +5460,8 @@ namespace libtorrent {
 
 		boost::asio::const_buffer certificate_buf(certificate.c_str(), certificate.size());
 
-		using boost::asio::ssl::context;
 		error_code ec;
-		m_ssl_ctx->use_certificate(certificate_buf, context::pem, ec);
+		m_ssl_ctx->use_certificate(certificate_buf, ssl::context::pem, ec);
 		if (ec)
 		{
 			if (alerts().should_post<torrent_error_alert>())
@@ -5467,7 +5469,7 @@ namespace libtorrent {
 		}
 
 		boost::asio::const_buffer private_key_buf(private_key.c_str(), private_key.size());
-		m_ssl_ctx->use_private_key(private_key_buf, context::pem, ec);
+		m_ssl_ctx->use_private_key(private_key_buf, ssl::context::pem, ec);
 		if (ec)
 		{
 			if (alerts().should_post<torrent_error_alert>())
@@ -10294,8 +10296,7 @@ namespace libtorrent {
 		, peer_source_flags_t const src)
 	{
 		need_peer_list();
-		torrent_state st = get_peer_list_state();
-		m_peer_list->update_peer_port(port, p, src, &st);
+		torrent_state st = get_peer_list_state(); m_peer_list->update_peer_port(port, p, src, &st);
 		peers_erased(st.erased);
 		update_want_peers();
 	}

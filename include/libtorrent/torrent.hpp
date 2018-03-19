@@ -76,17 +76,6 @@ POSSIBILITY OF SUCH DAMAGE.
 #include "libtorrent/aux_/allocating_handler.hpp"
 #include "libtorrent/extensions.hpp" // for add_peer_flags_t
 
-#ifdef TORRENT_USE_OPENSSL
-// there is no forward declaration header for asio
-namespace boost {
-namespace asio {
-namespace ssl {
-	class context;
-	class verify_context;
-}
-}
-}
-#endif
 
 #if TORRENT_COMPLETE_TYPES_REQUIRED
 #include "libtorrent/peer_connection.hpp"
@@ -98,6 +87,14 @@ namespace ssl {
 #define TORRENT_DEBUG_STREAMING 0
 
 namespace libtorrent {
+
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
+// there is no forward declaration header for asio
+namespace ssl {
+//	class context;
+	class verify_context;
+}
+#endif
 
 	class http_parser;
 
@@ -1123,7 +1120,7 @@ namespace libtorrent {
 		}
 
 		bool is_ssl_torrent() const { return m_ssl_torrent; }
-#ifdef TORRENT_USE_OPENSSL
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
 		void set_ssl_cert(std::string const& certificate
 			, std::string const& private_key
 			, std::string const& dh_params
@@ -1131,7 +1128,7 @@ namespace libtorrent {
 		void set_ssl_cert_buffer(std::string const& certificate
 			, std::string const& private_key
 			, std::string const& dh_params);
-		boost::asio::ssl::context* ssl_ctx() const { return m_ssl_ctx.get(); }
+		ssl::context* ssl_ctx() const { return m_ssl_ctx.get(); }
 #endif
 
 		int num_time_critical_pieces() const
@@ -1220,12 +1217,16 @@ namespace libtorrent {
 		// subsystem.
 		storage_holder m_storage;
 
-#ifdef TORRENT_USE_OPENSSL
-		std::shared_ptr<boost::asio::ssl::context> m_ssl_ctx;
-
-		bool verify_peer_cert(bool preverified, boost::asio::ssl::verify_context& ctx);
-
+#if defined TORRENT_USE_OPENSSL || defined TORRENT_USE_GNUTLS
+		std::shared_ptr<ssl::context> m_ssl_ctx;
 		void init_ssl(string_view cert);
+
+#if defined TORRENT_USE_OPENSSL
+		bool verify_peer_cert(bool preverified, boost::asio::ssl::verify_context& ctx);
+		void init_ssl_openssl(string_view cert);
+#elif defined TORRENT_USE_GNUTLS
+		void init_ssl_gnutls(string_view cert);
+#endif
 #endif
 
 		void setup_peer_class();
