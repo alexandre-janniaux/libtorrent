@@ -33,6 +33,12 @@ POSSIBILITY OF SUCH DAMAGE.
 #ifndef TORRENT_CONFIG_HPP_INCLUDED
 #define TORRENT_CONFIG_HPP_INCLUDED
 
+#ifdef HAVE_WINDOWS
+#include "libtorrent/mingw.condition_variable.h"
+#include "libtorrent/mingw.mutex.h"
+#include "libtorrent/mingw.thread.h"
+#endif
+
 #include "libtorrent/aux_/disable_warnings_push.hpp"
 
 #define _FILE_OFFSET_BITS 64
